@@ -1,22 +1,32 @@
 import streamlit as st
 import pandas as pd
 import base64
-from sklearn.model_selection import train_test_split
 import numpy as np
 import pickle as pickle
 import shap
-import streamlit.components.v1 as components
 import requests
 import datetime
 import json as js
 
+FASTAPI_URI = 'http://127.0.0.1:8000/'
+
+df_data = pd.read_csv('df_application_test.zip', compression='zip', header=0, sep=',', quotechar='"')
+df_selection = pd.read_csv('selected_feats.csv')
+selection = df_selection["selected_feats"].tolist()
+
 def main():
-    FASTAPI_URI = 'http://127.0.0.1:8000/predict'
+
+    def replace_none_in_dict(items):
+        replacement = ''
+        return {k: v if v is not None else replacement for k, v in items}
 
     def request_prediction(model_uri, data):
         headers = {"Content-Type": "application/json"}
         #response = requests.request(method='POST', headers=headers, url=model_uri, json=payload)
-        response = requests.post(model_uri, json=data, headers=headers)
+        json_str = js.dumps(data)
+        payload = js.loads(json_str, object_pairs_hook=replace_none_in_dict)
+
+        response = requests.post(model_uri + 'predict', json=data, headers=headers)
 
         if response.status_code != 200:
             raise Exception(
@@ -24,7 +34,53 @@ def main():
 
         return response.json()
     
-    def preprocess(AMT_CREDIT, AMT_INCOME_TOTAL, AMT_ANNUITY, AMT_GOODS_PRICE, CODE_GENDER, DAYS_BIRTH, NAME_FAMILY_STATUS, NAME_EDUCATION_TYPE, ORGANIZATION_TYPE, DAYS_EMPLOYED, ACTIVE_AMT_CREDIT_SUM_DEBT_MAX, DAYS_ID_PUBLISH, REGION_POPULATION_RELATIVE, FLAG_OWN_CAR, OWN_CAR_AGE, FLAG_DOCUMENT_3, CLOSED_DAYS_CREDIT_MAX, INSTAL_AMT_PAYMENT_SUM, APPROVED_CNT_PAYMENT_MEAN, PREV_CNT_PAYMENT_MEAN, PREV_APP_CREDIT_PERC_MIN, INSTAL_DPD_MEAN, INSTAL_DAYS_ENTRY_PAYMENT_MAX, POS_MONTHS_BALANCE_SIZE):
+    def get_ids(model_uri):
+        headers = {"Content-Type": "application/json"}
+        #response = requests.request(method='POST', headers=headers, url=model_uri, json=payload)
+        response = requests.get(model_uri + 'get_ids')
+
+        if response.status_code != 200:
+            raise Exception(
+                "Request failed with status {}, {}".format(response.status_code, response.text))
+
+        return response.json()
+    
+    def get_data(model_uri, data):
+        headers = {"Content-Type": "application/json"}
+        #response = requests.request(method='POST', headers=headers, url=model_uri, json=payload)
+        payload = {'SK_ID_CURR': data}
+        response = requests.post(model_uri + 'get_data', json=payload, headers=headers)
+
+        if response.status_code != 200:
+            raise Exception(
+                "Request failed with status {}, {}".format(response.status_code, response.text))
+
+        return response.json()
+    
+    def preprocess(AMT_CREDIT, 
+                   AMT_INCOME_TOTAL, 
+                   AMT_ANNUITY, 
+                   AMT_GOODS_PRICE, 
+                   CODE_GENDER, 
+                   DAYS_BIRTH, 
+                   NAME_FAMILY_STATUS, 
+                   NAME_EDUCATION_TYPE, 
+                   ORGANIZATION_TYPE, 
+                   DAYS_EMPLOYED, 
+                   ACTIVE_AMT_CREDIT_SUM_DEBT_MAX, 
+                   DAYS_ID_PUBLISH, 
+                   REGION_POPULATION_RELATIVE, 
+                   FLAG_OWN_CAR, OWN_CAR_AGE, 
+                   FLAG_DOCUMENT_3, 
+                   CLOSED_DAYS_CREDIT_MAX, 
+                   INSTAL_AMT_PAYMENT_SUM, 
+                   APPROVED_CNT_PAYMENT_MEAN, 
+                   PREV_CNT_PAYMENT_MEAN, 
+                   PREV_APP_CREDIT_PERC_MIN, 
+                   INSTAL_DPD_MEAN, 
+                   INSTAL_DAYS_ENTRY_PAYMENT_MAX, 
+                   POS_MONTHS_BALANCE_SIZE
+                  ):
 
         # Pre-processing user input
         PAYMENT_RATE = AMT_ANNUITY / AMT_CREDIT
@@ -33,15 +89,15 @@ def main():
                          'AMT_ANNUITY': AMT_ANNUITY,
                          'AMT_GOODS_PRICE': AMT_GOODS_PRICE,
                          'CODE_GENDER': CODE_GENDER,
-                         'DAYS_BIRTH': -DAYS_BIRTH,
+                         'DAYS_BIRTH': DAYS_BIRTH,
                          'NAME_FAMILY_STATUS': NAME_FAMILY_STATUS,
                          'NAME_EDUCATION_TYPE': NAME_EDUCATION_TYPE,
                          'ORGANIZATION_TYPE': ORGANIZATION_TYPE,
-                         'DAYS_EMPLOYED': -DAYS_EMPLOYED,
+                         'DAYS_EMPLOYED': DAYS_EMPLOYED,
                          'ACTIVE_AMT_CREDIT_SUM_DEBT_MAX': ACTIVE_AMT_CREDIT_SUM_DEBT_MAX,
                          'PAYMENT_RATE': PAYMENT_RATE,
                          'ANNUITY_INCOME_PERC': ANNUITY_INCOME_PERC,
-                         'DAYS_ID_PUBLISH': -DAYS_ID_PUBLISH,
+                         'DAYS_ID_PUBLISH': DAYS_ID_PUBLISH,
                          'REGION_POPULATION_RELATIVE': REGION_POPULATION_RELATIVE,
                          'FLAG_OWN_CAR': FLAG_OWN_CAR,
                          'OWN_CAR_AGE': OWN_CAR_AGE,
@@ -104,159 +160,470 @@ def main():
     st.sidebar.write("Please choose parameters that describe the applicant")
 
     #input features
-    AMT_CREDIT = st.sidebar.number_input("Enter the credit amount of the loan (dollars):", min_value=1, value=100000)
-    AMT_INCOME_TOTAL = st.sidebar.number_input("Enter the annual income of the client (dollars):", min_value=1, value=60000)
-    AMT_ANNUITY = st.sidebar.number_input("Enter the loan annuity (dollars):", min_value=0, value=20000)
-    AMT_GOODS_PRICE = st.sidebar.number_input("For consumer loans, enter the price of the goods for which the loan is given:", min_value=0, value=450000)
-    CODE_GENDER = st.sidebar.radio("Select client gender: ", ('Female', 'Male'))
+    IDs = get_ids(FASTAPI_URI)["IDs"]
+    
+    SK_ID_CURR = st.sidebar.selectbox("Select client ID: ", (IDs))
+    dict_data = get_data(FASTAPI_URI, int(SK_ID_CURR))["Data"]
+    st.write(dict_data[0][0])
+    AMT_CREDIT = st.sidebar.number_input("Enter the credit amount of the loan (dollars):", min_value=1.0, value=dict_data[0][0]['AMT_CREDIT'])
+    AMT_INCOME_TOTAL = st.sidebar.number_input("Enter the annual income of the client (dollars):", min_value=1.0, value=dict_data[0][0]['AMT_INCOME_TOTAL'])
+    
+    if dict_data[0][0]['AMT_ANNUITY'] != None:
+        AMT_ANNUITY = st.sidebar.number_input("Enter the loan annuity (dollars):", min_value=1.0, value=dict_data[0][0]['AMT_ANNUITY'])
+    else:
+        AMT_ANNUITY = st.sidebar.number_input("Enter the loan annuity (dollars):", min_value=1.0, disabled=True)
+        AMT_ANNUITY = None
+        
+    AMT_GOODS_PRICE = st.sidebar.number_input(
+        "For consumer loans, enter the price of the goods for which the loan is given:", 
+        min_value=1.0, 
+        value=dict_data[0][0]['AMT_GOODS_PRICE']
+    )
+    
+    if dict_data[0][0]["CODE_GENDER"] == True:
+        CODE_GENDER = st.sidebar.radio("Select client gender: ", ('Female', 'Male'), index=0)
+    else:
+        CODE_GENDER = st.sidebar.radio("Select client gender: ", ('Female', 'Male'), index=1)
+    
     if CODE_GENDER == "Female":
         CODE_GENDER = True
     else:
         CODE_GENDER = False
-    DAYS_BIRTH = (datetime.date.today() - (st.sidebar.date_input("Enter the birth date of the client:", min_value=datetime.date(1900, 1, 1), max_value=datetime.date.today()))).days
-    NAME_FAMILY_STATUS = st.sidebar.selectbox("Select the family status of the client: ", (
+
+    date_of_birth = datetime.date.today() + datetime.timedelta(days=dict_data[0][0]["DAYS_BIRTH"])
+    DAYS_BIRTH = -(datetime.date.today() - (st.sidebar.date_input(
+        "Enter the birth date of the client:", 
+        min_value=datetime.date(1900, 1, 1), 
+        max_value=datetime.date.today(), 
+        value=date_of_birth))
+                  ).days
+    
+    def get_string_index(strings, substr):
+        if substr != None:
+            for idx, string in enumerate(strings):
+                if substr in string:
+                    break
+            return idx
+        else:
+            return substr
+    
+    family_status = [
         'Civil marriage',
         'Married',
         'Separated',
         'Single / not married',
         'Unknown',
         'Widow'
-    ), index=3)
-    NAME_EDUCATION_TYPE = st.sidebar.selectbox("Select the client's education: ", ('Academic degree', 'Higher education', 'Incomplete higher', 'Lower secondary', 'Secondary / secondary special'), index=1)
-    ORGANIZATION_TYPE = st.sidebar.selectbox("Select the type of organization where the client works: ", (
-                                             'Advertising',
-                                             'Agriculture',
-                                             'Bank',
-                                             'Business Entity Type 1',
-                                             'Business Entity Type 2',
-                                             'Business Entity Type 3',
-                                             'Cleaning',
-                                             'Construction',
-                                             'Culture',
-                                             'Electricity',
-                                             'Emergency',
-                                             'Government',
-                                             'Hotel',
-                                             'Housing',
-                                             'Industry: type 1',
-                                             'Industry: type 2',
-                                             'Industry: type 3',
-                                             'Industry: type 4',
-                                             'Industry: type 5',
-                                             'Industry: type 6',
-                                             'Industry: type 7',
-                                             'Industry: type 8',
-                                             'Industry: type 9',
-                                             'Industry: type 10',
-                                             'Industry: type 11',
-                                             'Industry: type 12',
-                                             'Industry: type 13',
-                                             'Insurance',
-                                             'Kindergarten',
-                                             'Legal Services',
-                                             'Medicine',
-                                             'Military',
-                                             'Mobile',
-                                             'Other',
-                                             'Police',
-                                             'Postal',
-                                             'Realtor',
-                                             'Religion',
-                                             'Restaurant',
-                                             'School',
-                                             'Security',
-                                             'Security Ministries',
-                                             'Self-employed',
-                                             'Services',
-                                             'Telecom',
-                                             'Trade: type 1',
-                                             'Trade: type 2',
-                                             'Trade: type 3',
-                                             'Trade: type 4',
-                                             'Trade: type 5',
-                                             'Trade: type 6',
-                                             'Trade: type 7',
-                                             'Transport: type 1',
-                                             'Transport: type 2',
-                                             'Transport: type 3',
-                                             'Transport: type 4',
-                                             'University',
-                                             'XNA'
-                                            ), index=2)
-    DAYS_EMPLOYED = st.sidebar.number_input("Enter how many days before the application the person started current employment (days):", min_value=0, max_value=20000, value=365)
-    ACTIVE_AMT_CREDIT_SUM_DEBT_MAX = st.sidebar.number_input("Enter the maximum current debt on Credit Bureau credit (dollars):", min_value=-5000000, max_value=5000000, value=200000)
-    DAYS_ID_PUBLISH = st.sidebar.number_input("How many days before the application did client change the identity document with which he applied for the loan, time only relative to the application (days):", min_value=0, max_value=10000, value=3254)
-    REGION_POPULATION_RELATIVE = st.sidebar.slider("Enter the normalized population of region where client lives (higher number means the client lives in more populated region): ", min_value=0.0, max_value=0.1, step=0.001, value=0.018850)
-    FLAG_OWN_CAR = st.sidebar.radio("Does the client own a car?", ("Yes", "No"))
+    ]
+    NAME_FAMILY_STATUS = st.sidebar.selectbox(
+        "Select the family status of the client: ", 
+        family_status, 
+        index=get_string_index(family_status, dict_data[0][0]["NAME_FAMILY_STATUS"])
+    )
+    
+    education_type = [
+        'Academic degree', 
+        'Higher education', 
+        'Incomplete higher', 
+        'Lower secondary', 
+        'Secondary / secondary special'
+    ]
+    
+    NAME_EDUCATION_TYPE = st.sidebar.selectbox(
+        "Select the client's education: ", 
+        education_type, 
+        index=get_string_index(education_type, dict_data[0][0]["NAME_EDUCATION_TYPE"])
+    )
+    
+    organization_type = [
+         'Advertising',
+         'Agriculture',
+         'Bank',
+         'Business Entity Type 1',
+         'Business Entity Type 2',
+         'Business Entity Type 3',
+         'Cleaning',
+         'Construction',
+         'Culture',
+         'Electricity',
+         'Emergency',
+         'Government',
+         'Hotel',
+         'Housing',
+         'Industry: type 1',
+         'Industry: type 2',
+         'Industry: type 3',
+         'Industry: type 4',
+         'Industry: type 5',
+         'Industry: type 6',
+         'Industry: type 7',
+         'Industry: type 8',
+         'Industry: type 9',
+         'Industry: type 10',
+         'Industry: type 11',
+         'Industry: type 12',
+         'Industry: type 13',
+         'Insurance',
+         'Kindergarten',
+         'Legal Services',
+         'Medicine',
+         'Military',
+         'Mobile',
+         'Other',
+         'Police',
+         'Postal',
+         'Realtor',
+         'Religion',
+         'Restaurant',
+         'School',
+         'Security',
+         'Security Ministries',
+         'Self-employed',
+         'Services',
+         'Telecom',
+         'Trade: type 1',
+         'Trade: type 2',
+         'Trade: type 3',
+         'Trade: type 4',
+         'Trade: type 5',
+         'Trade: type 6',
+         'Trade: type 7',
+         'Transport: type 1',
+         'Transport: type 2',
+         'Transport: type 3',
+         'Transport: type 4',
+         'University',
+         'XNA'
+        ]
+        
+    ORGANIZATION_TYPE = st.sidebar.selectbox(
+        "Select the type of organization where the client works: ", 
+        organization_type, 
+        index=get_string_index(organization_type, dict_data[0][0]["ORGANIZATION_TYPE"])
+    )
+    
+    if dict_data[0][0]["DAYS_EMPLOYED"] != None:
+        DAYS_EMPLOYED = st.sidebar.number_input(
+            "Enter how many days before the application the person started current employment (days):",
+            min_value=-20000.0,
+            max_value=0.0,
+            value=dict_data[0][0]["DAYS_EMPLOYED"]
+        )
+    else:
+        DAYS_EMPLOYED = st.sidebar.number_input(
+            "Enter how many days before the application the person started current employment (days):",
+            min_value=-20000.0,
+            max_value=0.0,
+            disabled=True
+        )
+        DAYS_EMPLOYED = None
+        
+    if dict_data[0][0]["ACTIVE_AMT_CREDIT_SUM_DEBT_MAX"] != None:
+        ACTIVE_AMT_CREDIT_SUM_DEBT_MAX = st.sidebar.number_input(
+            "Enter the maximum current debt on Credit Bureau credit (dollars):",
+            min_value=-5000000.0, 
+            max_value=5000000.0,
+            value=dict_data[0][0]["ACTIVE_AMT_CREDIT_SUM_DEBT_MAX"]
+        )
+    else:
+        ACTIVE_AMT_CREDIT_SUM_DEBT_MAX = st.sidebar.number_input(
+            "Enter the maximum current debt on Credit Bureau credit (dollars):",
+            min_value=-5000000.0, 
+            max_value=5000000.0,
+            disabled=True
+        )
+        ACTIVE_AMT_CREDIT_SUM_DEBT_MAX = None
+    
+    DAYS_ID_PUBLISH = st.sidebar.number_input(
+        "How many days before the application did client change the identity document with which he applied for the loan, time only relative to the application (days):",
+        min_value=-10000,
+        max_value=0,
+        value=dict_data[0][0]["DAYS_ID_PUBLISH"]
+    )
+    
+    REGION_POPULATION_RELATIVE = st.sidebar.slider(
+        "Enter the normalized population of region where client lives (higher number means the client lives in more populated region): ", 
+        min_value=0.0, 
+        max_value=0.1, 
+        step=0.001, 
+        value=dict_data[0][0]["REGION_POPULATION_RELATIVE"]
+    )
+    
+    if dict_data[0][0]["FLAG_OWN_CAR"] == True:
+        FLAG_OWN_CAR = st.sidebar.radio("Does the client own a car?", ("Yes", "No"), index=0)
+    else:
+        FLAG_OWN_CAR = st.sidebar.radio("Does the client own a car?", ("Yes", "No"), index=1)
+        
     if FLAG_OWN_CAR == "Yes":
         FLAG_OWN_CAR = True
     else:
         FLAG_OWN_CAR = False
-    OWN_CAR_AGE = st.sidebar.number_input("Age of the client's car (years):", min_value=0, value=9, disabled=not FLAG_OWN_CAR)
-    FLAG_DOCUMENT_3 = st.sidebar.radio("Did client provide document 3? ", ('Yes', 'No'))
+        
+    if dict_data[0][0]["OWN_CAR_AGE"] != None:
+        OWN_CAR_AGE = st.sidebar.number_input(
+            "Age of the client's car (years):",
+            min_value=0.0,
+            value=dict_data[0][0]["OWN_CAR_AGE"],
+            disabled=not FLAG_OWN_CAR
+        )
+    else:
+        OWN_CAR_AGE = st.sidebar.number_input(
+            "Age of the client's car (years):",
+            min_value=0.0,
+            disabled=True
+        )
+        OWN_CAR_AGE = None
+    
+    if dict_data[0][0]["FLAG_DOCUMENT_3"] == True:
+        FLAG_DOCUMENT_3 = st.sidebar.radio("Did client provide document 3? ", ('Yes', 'No'), index=0)
+    else:
+        FLAG_DOCUMENT_3 = st.sidebar.radio("Did client provide document 3? ", ('Yes', 'No'), index=1
+                                          )
     if FLAG_DOCUMENT_3 == "Yes":
         FLAG_DOCUMENT_3 = True
     else:
         FLAG_DOCUMENT_3 = False
     
-    CLOSED_DAYS_CREDIT_MAX = st.sidebar.number_input("When the status of the Credit Bureau (CB) reported credits si 'closed', how many days (MAX) before current application did client apply for Credit Bureau credit? time only relative to the application (days):", min_value=0, max_value=5000, value=729)
-    
+    if dict_data[0][0]["CLOSED_DAYS_CREDIT_MAX"] != None:
+        CLOSED_DAYS_CREDIT_MAX = st.sidebar.number_input(
+            "When the status of the Credit Bureau (CB) reported credits si 'closed', how many days (MAX) before current application did client apply for Credit Bureau credit? time only relative to the application (days):",
+            min_value=-5000.0,
+            max_value=0.0,
+            value=dict_data[0][0]["CLOSED_DAYS_CREDIT_MAX"]
+        )
+    else:
+        CLOSED_DAYS_CREDIT_MAX = st.sidebar.number_input(
+            "When the status of the Credit Bureau (CB) reported credits si 'closed', how many days (MAX) before current application did client apply for Credit Bureau credit? time only relative to the application (days):",
+            min_value=-5000.0,
+            max_value=0.0,
+            disabled=True
+        )
+        CLOSED_DAYS_CREDIT_MAX = None
+        
     # if previous application to loan was accepted
-    prev_loan = st.sidebar.radio("Have you ever contracted a loan before?", ("Yes", "No"))
+    prev_loan = st.sidebar.radio("Has the client ever contracted a loan before?", ("Yes", "No"))
     if prev_loan == "Yes":
         prev_loan = False
     else:
         prev_loan = True
 
-    INSTAL_AMT_PAYMENT_SUM = st.sidebar.number_input("Enter the total sum of previous loan installments (dollars):", min_value=0, max_value=5000000, disabled=prev_loan, value=50000)
-    APPROVED_CNT_PAYMENT_MEAN = st.sidebar.number_input("Enter the MEAN term of previous ACCEPTED credit applications (years):", min_value=0, max_value=5000000, disabled=prev_loan, value=13)
-    PREV_CNT_PAYMENT_MEAN = st.sidebar.number_input("Enter the MEAN term of ALL (accepted or refused) previous credit applications (years):", min_value=0, max_value=5000000, disabled=prev_loan, value=13)
-    PREV_APP_CREDIT_PERC_MIN = st.sidebar.slider("Enter minimum of the ratio between how much credit did client asked for on the previous application and how much he actually was offered (%):", min_value=0, max_value=1000, step=1, value=90, disabled=prev_loan)
-    INSTAL_DPD_MEAN = st.sidebar.number_input("What is the MEAN days past due of the previous credit? (days):",min_value=0, max_value=10000, value=0, disabled=prev_loan)
-    INSTAL_DAYS_ENTRY_PAYMENT_MAX = st.sidebar.number_input("What is the maximum number of days between when the installments of previous credit was actually paid and the application date of current loan (days):", min_value=0, max_value=5000, value=88, disabled=prev_loan)
-    POS_MONTHS_BALANCE_SIZE = st.sidebar.number_input("How may monthly cash balances were observed for ALL the previous loans (months):", min_value=0, value=22, disabled=prev_loan)
+    if dict_data[0][0]["INSTAL_AMT_PAYMENT_SUM"] != None:
+        INSTAL_AMT_PAYMENT_SUM = st.sidebar.number_input(
+            "Enter the total sum of previous loan installments (dollars):",
+            min_value=0.0,
+            max_value=5000000.0,
+            disabled=prev_loan,
+            value=dict_data[0][0]["INSTAL_AMT_PAYMENT_SUM"]
+        )
+    else:
+        INSTAL_AMT_PAYMENT_SUM = st.sidebar.number_input(
+            "Enter the total sum of previous loan installments (dollars):",
+            min_value=0.0,
+            max_value=5000000.0,
+            disabled=True
+        )
+        INSTAL_AMT_PAYMENT_SUM = None
+        
+    if dict_data[0][0]["APPROVED_CNT_PAYMENT_MEAN"] != None:
+        APPROVED_CNT_PAYMENT_MEAN = st.sidebar.number_input(
+            "Enter the MEAN term of previous ACCEPTED credit applications (years):",
+            min_value=0.0,
+            max_value=5000000.0,
+            disabled=prev_loan,
+            value=dict_data[0][0]["APPROVED_CNT_PAYMENT_MEAN"]
+        )
+    else:
+        APPROVED_CNT_PAYMENT_MEAN = st.sidebar.number_input(
+            "Enter the MEAN term of previous ACCEPTED credit applications (years):",
+            min_value=0.0,
+            max_value=5000000.0,
+            disabled=True,
+        )
+        APPROVED_CNT_PAYMENT_MEAN = None
+    
+    if dict_data[0][0]["PREV_CNT_PAYMENT_MEAN"] != None:
+        PREV_CNT_PAYMENT_MEAN = st.sidebar.number_input(
+            "Enter the MEAN term of ALL (accepted or refused) previous credit applications (years):",
+            min_value=0.0,
+            max_value=5000000.0, 
+            disabled=prev_loan, 
+            value=dict_data[0][0]["PREV_CNT_PAYMENT_MEAN"]
+        )
+    else:
+        PREV_CNT_PAYMENT_MEAN = st.sidebar.number_input(
+        "Enter the MEAN term of ALL (accepted or refused) previous credit applications (years):",
+        min_value=0.0,
+        max_value=5000000.0, 
+        disabled=True
+        )
+        PREV_CNT_PAYMENT_MEAN = None
+    
+    if dict_data[0][0]["PREV_APP_CREDIT_PERC_MIN"] != None:
+        PREV_APP_CREDIT_PERC_MIN = st.sidebar.slider(
+            "Enter minimum of the ratio between how much credit did client asked for on the previous application and how much he actually was offered (%):",
+            min_value=0.0, 
+            max_value=1000.0, 
+            step=1.0, 
+            value=dict_data[0][0]["PREV_APP_CREDIT_PERC_MIN"], 
+            disabled=prev_loan
+        )
+    else:
+        PREV_APP_CREDIT_PERC_MIN = st.sidebar.slider(
+        "Enter minimum of the ratio between how much credit did client asked for on the previous application and how much he actually was offered (%):",
+        min_value=0.0, 
+        max_value=1000.0, 
+        step=1.0,
+        disabled=True
+        )
+        PREV_APP_CREDIT_PERC_MIN = None
+        
+    if dict_data[0][0]["INSTAL_DPD_MEAN"] != None:
+        INSTAL_DPD_MEAN = st.sidebar.number_input(
+            "What is the MEAN days past due of the previous credit? (days):",
+            min_value=0.0, 
+            max_value=10000.0, 
+            value=dict_data[0][0]["INSTAL_DPD_MEAN"],
+            disabled=prev_loan
+        )
+    else:
+        INSTAL_DPD_MEAN = st.sidebar.number_input(
+        "What is the MEAN days past due of the previous credit? (days):",
+        min_value=0.0, 
+        max_value=10000.0,
+        disabled=True
+        )
+        INSTAL_DPD_MEAN = None
+    
+    if dict_data[0][0]["INSTAL_DAYS_ENTRY_PAYMENT_MAX"] != None:
+        INSTAL_DAYS_ENTRY_PAYMENT_MAX = st.sidebar.number_input("What is the maximum number of days between when the installments of previous credit was actually paid and the application date of current loan (days):",
+                                                                min_value=-5000.0, 
+                                                                max_value=0.0, 
+                                                                value=dict_data[0][0]["INSTAL_DAYS_ENTRY_PAYMENT_MAX"], 
+                                                                disabled=prev_loan
+                                                               )
+    else:
+        INSTAL_DAYS_ENTRY_PAYMENT_MAX = st.sidebar.number_input("What is the maximum number of days between when the installments of previous credit was actually paid and the application date of current loan (days):",
+                                                                min_value=-5000.0, 
+                                                                max_value=0.0, 
+                                                                disabled=True
+                                                               )
+        INSTAL_DAYS_ENTRY_PAYMENT_MAX = None
+    
+    if dict_data[0][0]["POS_MONTHS_BALANCE_SIZE"] != None:
+        POS_MONTHS_BALANCE_SIZE = st.sidebar.number_input(
+            "How may monthly cash balances were observed for ALL the previous loans (months):", 
+            min_value=0.0,
+            value=dict_data[0][0]["POS_MONTHS_BALANCE_SIZE"],
+            disabled=prev_loan
+        )
+    else:
+        POS_MONTHS_BALANCE_SIZE = st.sidebar.number_input(
+        "How may monthly cash balances were observed for ALL the previous loans (months):", 
+        min_value=0.0,
+        disabled=True
+        )
+        POS_MONTHS_BALANCE_SIZE = None
 
     #predict button
     btn_predict = st.sidebar.button("Predict")
 
     if btn_predict:
-        user_input = preprocess(AMT_CREDIT, AMT_INCOME_TOTAL, AMT_ANNUITY, AMT_GOODS_PRICE, CODE_GENDER, DAYS_BIRTH, NAME_FAMILY_STATUS, NAME_EDUCATION_TYPE, ORGANIZATION_TYPE, DAYS_EMPLOYED, ACTIVE_AMT_CREDIT_SUM_DEBT_MAX, DAYS_ID_PUBLISH, REGION_POPULATION_RELATIVE, FLAG_OWN_CAR, OWN_CAR_AGE, FLAG_DOCUMENT_3, CLOSED_DAYS_CREDIT_MAX, INSTAL_AMT_PAYMENT_SUM, APPROVED_CNT_PAYMENT_MEAN, PREV_CNT_PAYMENT_MEAN, PREV_APP_CREDIT_PERC_MIN, INSTAL_DPD_MEAN, INSTAL_DAYS_ENTRY_PAYMENT_MAX, POS_MONTHS_BALANCE_SIZE)
+        user_input = preprocess(
+            AMT_CREDIT, 
+            AMT_INCOME_TOTAL,
+            AMT_ANNUITY,
+            AMT_GOODS_PRICE, 
+            CODE_GENDER,
+            DAYS_BIRTH, 
+            NAME_FAMILY_STATUS,
+            NAME_EDUCATION_TYPE,
+            ORGANIZATION_TYPE,
+            DAYS_EMPLOYED,
+            ACTIVE_AMT_CREDIT_SUM_DEBT_MAX,
+            DAYS_ID_PUBLISH, 
+            REGION_POPULATION_RELATIVE,
+            FLAG_OWN_CAR,
+            OWN_CAR_AGE, 
+            FLAG_DOCUMENT_3, 
+            CLOSED_DAYS_CREDIT_MAX,
+            INSTAL_AMT_PAYMENT_SUM,
+            APPROVED_CNT_PAYMENT_MEAN,
+            PREV_CNT_PAYMENT_MEAN,
+            PREV_APP_CREDIT_PERC_MIN,
+            INSTAL_DPD_MEAN,
+            INSTAL_DAYS_ENTRY_PAYMENT_MAX,
+            POS_MONTHS_BALANCE_SIZE
+        )
         
         pred = None
         pred = request_prediction(FASTAPI_URI, user_input)["Probability"][0]
         st.write(
-            'La prédiction est de {:.2f}'.format(pred))
+            'The credit default risk is {:.2f}'.format(pred))
         
-        if pred > 0.5:
-            st.error('Warning! The applicant has a high risk of not paying the loan back!')
+        threshold = 0.5
+        if pred > threshold:
+            st.error('DECLINED! The applicant has a high risk of not paying the loan back.')
         else:
-            st.success('It is green! The applicant has a high probability of paying the loan back!')
-        '''
+            st.success('APPROVED! The applicant has a high probability of paying the loan back.')
+        
         #prepare test set for shap explainability
-        loans = st.cache(pd.read_csv)("mycsvfile.csv")
-        X = loans.drop(columns=['loan_status','home_ownership__ANY','home_ownership__MORTGAGE','home_ownership__NONE','home_ownership__OTHER','home_ownership__OWN',
-                       'home_ownership__RENT','addr_state__AK','addr_state__AL','addr_state__AR','addr_state__AZ','addr_state__CA','addr_state__CO','addr_state__CT',
-                       'addr_state__DC','addr_state__DE','addr_state__FL','addr_state__GA','addr_state__HI','addr_state__ID','addr_state__IL','addr_state__IN',
-                       'addr_state__KS','addr_state__KY','addr_state__LA','addr_state__MA','addr_state__MD','addr_state__ME','addr_state__MI','addr_state__MN',
-                       'addr_state__MO','addr_state__MS','addr_state__MT','addr_state__NC','addr_state__ND','addr_state__NE','addr_state__NH','addr_state__NJ',
-                       'addr_state__NM','addr_state__NV','addr_state__NY','addr_state__OH','addr_state__OK','addr_state__OR','addr_state__PA','addr_state__RI',
-                       'addr_state__SC','addr_state__SD','addr_state__TN','addr_state__TX','addr_state__UT','addr_state__VA','addr_state__VT', 'addr_state__WA',
-                       'addr_state__WI','addr_state__WV','addr_state__WY'])
-        y = loans[['loan_status']]
-        y_ravel = y.values.ravel()
-
-        X_train, X_test, y_train, y_test = train_test_split(X, y_ravel, test_size=0.25, random_state=42, stratify=y)
-
         st.subheader('Result Interpretability - Applicant Level')
         shap.initjs()
-        explainer = shap.Explainer(model, X_train)
-        shap_values = explainer(user_input)
-        fig = shap.plots.bar(shap_values[0])
-        st.pyplot(fig)
+        with open('shap_explainer.pickle', 'rb') as handle:
+            explainer = pickle.load(handle)
+        df_user_input = pd.DataFrame([user_input])
 
+        df_user_input["NAME_EDUCATION_TYPE"] = df_user_input["NAME_EDUCATION_TYPE"].astype('category')
+        df_user_input["ORGANIZATION_TYPE"] = df_user_input["ORGANIZATION_TYPE"].astype('category')
+        df_user_input["NAME_FAMILY_STATUS"] = df_user_input["NAME_FAMILY_STATUS"].astype('category')
+        df_user_input["OWN_CAR_AGE"] = df_user_input["OWN_CAR_AGE"].astype('float')
+        '''
+        ACTIVE_AMT_CREDIT_SUM_DEBT_MAX     float32
+        AMT_ANNUITY                        float32
+        AMT_CREDIT                         float32
+        AMT_GOODS_PRICE                    float32
+        ANNUITY_INCOME_PERC                float32
+        APPROVED_CNT_PAYMENT_MEAN          float32
+        CLOSED_DAYS_CREDIT_MAX             float32
+        CODE_GENDER                           bool
+        DAYS_BIRTH                           int32
+        DAYS_EMPLOYED                      float32
+        DAYS_ID_PUBLISH                      int32
+        FLAG_DOCUMENT_3                       bool
+        FLAG_OWN_CAR                          bool
+        INSTAL_AMT_PAYMENT_SUM             float32
+        INSTAL_DAYS_ENTRY_PAYMENT_MAX      float32
+        INSTAL_DPD_MEAN                    float32
+        PAYMENT_RATE                       float32
+        POS_MONTHS_BALANCE_SIZE            float32
+        PREV_APP_CREDIT_PERC_MIN           float32
+        PREV_CNT_PAYMENT_MEAN              float32
+        REGION_POPULATION_RELATIVE         float32
+        '''
+        shap_values = explainer.shap_values(df_user_input)
+        fig = shap.summary_plot(
+            shap_values,
+            features=df_user_input.iloc[[0]], 
+            feature_names=df_user_input.iloc[[0]].columns, 
+            plot_type='bar')
+        st.pyplot(fig)
+        
         st.subheader('Model Interpretability - Overall')
-        shap_values_ttl = explainer(X_test)
-        fig_ttl = shap.plots.beeswarm(shap_values_ttl)
+        with open('shap_values.pickle', 'rb') as handle:
+            shap_values_ttl = pickle.load(handle)
+            
+        if pred > threshold:
+            fig_ttl = shap.summary_plot(
+                shap_values_ttl[1],
+                features=df_data[selection], 
+                feature_names=df_data[selection].columns
+            )
+        else:
+            fig_ttl = shap.summary_plot(
+                shap_values_ttl[0],
+                features=df_data[selection], 
+                feature_names=df_data[selection].columns
+            )
         st.pyplot(fig_ttl)
         st.write(""" In this chart blue and red mean the feature value, e.g. annual income blue is a smaller value e.g. 40K USD,
         and red is a higher value e.g. 100K USD. The width of the bars represents the number of observations on a certain feature value,
@@ -265,7 +632,6 @@ def main():
         What we are learning from this chart is that features such as annual_inc and sub_grade are the most impactful features driving the outcome prediction.
         The higher the salary is, or the lower the subgrade is, the more likely the applicant to pay the loan back and vice versa, which makes total sense in our case.
         """)
-        '''
     
 if __name__ == '__main__':
     main()
