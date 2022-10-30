@@ -1,0 +1,5 @@
+pandas
+shap==0.41.0
+streamlit
+numpy
+requests
