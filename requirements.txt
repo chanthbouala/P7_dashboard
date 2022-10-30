@@ -3,4 +3,4 @@ shap==0.41.0
 streamlit
 numpy
 requests
-pickle
+pickle5==0.0.11

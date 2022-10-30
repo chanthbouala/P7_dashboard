@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import base64
 import numpy as np
-import pickle as pickle
+import pickle5 as pickle
 import shap
 import requests
 import datetime
@@ -538,29 +538,7 @@ def main():
         df_user_input["ORGANIZATION_TYPE"] = df_user_input["ORGANIZATION_TYPE"].astype('category')
         df_user_input["NAME_FAMILY_STATUS"] = df_user_input["NAME_FAMILY_STATUS"].astype('category')
         df_user_input["OWN_CAR_AGE"] = df_user_input["OWN_CAR_AGE"].astype('float')
-        '''
-        ACTIVE_AMT_CREDIT_SUM_DEBT_MAX     float32
-        AMT_ANNUITY                        float32
-        AMT_CREDIT                         float32
-        AMT_GOODS_PRICE                    float32
-        ANNUITY_INCOME_PERC                float32
-        APPROVED_CNT_PAYMENT_MEAN          float32
-        CLOSED_DAYS_CREDIT_MAX             float32
-        CODE_GENDER                           bool
-        DAYS_BIRTH                           int32
-        DAYS_EMPLOYED                      float32
-        DAYS_ID_PUBLISH                      int32
-        FLAG_DOCUMENT_3                       bool
-        FLAG_OWN_CAR                          bool
-        INSTAL_AMT_PAYMENT_SUM             float32
-        INSTAL_DAYS_ENTRY_PAYMENT_MAX      float32
-        INSTAL_DPD_MEAN                    float32
-        PAYMENT_RATE                       float32
-        POS_MONTHS_BALANCE_SIZE            float32
-        PREV_APP_CREDIT_PERC_MIN           float32
-        PREV_CNT_PAYMENT_MEAN              float32
-        REGION_POPULATION_RELATIVE         float32
-        '''
+       
         shap_values = explainer.shap_values(df_user_input)
         fig = shap.summary_plot(
             shap_values,
