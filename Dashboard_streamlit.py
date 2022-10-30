@@ -33,7 +33,6 @@ def main():
         #response = requests.request(method='POST', headers=headers, url=model_uri, json=payload)
         json_str = js.dumps(data)
         payload = js.loads(json_str, object_pairs_hook=replace_none_in_dict)
-        st.write(payload)
         response = requests.post(model_uri + 'predict', json=payload, headers=headers)
 
         if response.status_code != 200:
@@ -41,30 +40,7 @@ def main():
                 "Request failed with status {}, {}".format(response.status_code, response.text))
 
         return response.json()
-    '''
-    def get_ids(model_uri):
-        headers = {"Content-Type": "application/json"}
-        #response = requests.request(method='POST', headers=headers, url=model_uri, json=payload)
-        response = requests.get(model_uri + 'get_ids')
 
-        if response.status_code != 200:
-            raise Exception(
-                "Request failed with status {}, {}".format(response.status_code, response.text))
-
-        return response.json()
-    
-    def get_data(model_uri, data):
-        headers = {"Content-Type": "application/json"}
-        #response = requests.request(method='POST', headers=headers, url=model_uri, json=payload)
-        payload = {'SK_ID_CURR': data}
-        response = requests.post(model_uri + 'get_data', json=payload, headers=headers)
-
-        if response.status_code != 200:
-            raise Exception(
-                "Request failed with status {}, {}".format(response.status_code, response.text))
-
-        return response.json()
-    '''
     def preprocess(AMT_CREDIT, 
                    AMT_INCOME_TOTAL, 
                    AMT_ANNUITY, 
@@ -164,7 +140,6 @@ def main():
     
     SK_ID_CURR = st.sidebar.selectbox("Select client ID: ", (IDs))
     dict_data = df_data.loc[df_data["SK_ID_CURR"] == SK_ID_CURR].to_dict(orient='records')
-    st.write(dict_data)
     AMT_CREDIT = st.sidebar.number_input("Enter the credit amount of the loan (dollars):", min_value=1.0, value=dict_data[0]['AMT_CREDIT'])
     AMT_INCOME_TOTAL = st.sidebar.number_input("Enter the annual income of the client (dollars):", min_value=1.0, value=dict_data[0]['AMT_INCOME_TOTAL'])
     
