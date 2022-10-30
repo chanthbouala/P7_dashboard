@@ -7,33 +7,41 @@ import shap
 import requests
 import datetime
 import json as js
+import math
 
-FASTAPI_URI = 'http://127.0.0.1:8000/'
+FASTAPI_URI = 'https://p7-fastapi-backend.herokuapp.com/'
 
 df_data = pd.read_csv('df_application_test.zip', compression='zip', header=0, sep=',', quotechar='"')
 df_selection = pd.read_csv('selected_feats.csv')
 selection = df_selection["selected_feats"].tolist()
 
-def main():
 
+st.set_page_config(
+    page_title="Loan Prediction App",
+    page_icon="loan_approved_hero_image.jpg"
+)
+
+st.set_option('deprecation.showPyplotGlobalUse', False)
+
+def main():
     def replace_none_in_dict(items):
-        replacement = ''
-        return {k: v if v is not None else replacement for k, v in items}
+        replacement = None
+        return {k: v if ((type(v) is not str and not np.isnan(v)) or (type(v) is str and v == v)) else replacement for k, v in items}
 
     def request_prediction(model_uri, data):
         headers = {"Content-Type": "application/json"}
         #response = requests.request(method='POST', headers=headers, url=model_uri, json=payload)
         json_str = js.dumps(data)
         payload = js.loads(json_str, object_pairs_hook=replace_none_in_dict)
-
-        response = requests.post(model_uri + 'predict', json=data, headers=headers)
+        st.write(payload)
+        response = requests.post(model_uri + 'predict', json=payload, headers=headers)
 
         if response.status_code != 200:
             raise Exception(
                 "Request failed with status {}, {}".format(response.status_code, response.text))
 
         return response.json()
-    
+    '''
     def get_ids(model_uri):
         headers = {"Content-Type": "application/json"}
         #response = requests.request(method='POST', headers=headers, url=model_uri, json=payload)
@@ -56,7 +64,7 @@ def main():
                 "Request failed with status {}, {}".format(response.status_code, response.text))
 
         return response.json()
-    
+    '''
     def preprocess(AMT_CREDIT, 
                    AMT_INCOME_TOTAL, 
                    AMT_ANNUITY, 
@@ -114,14 +122,6 @@ def main():
 
         return dict(user_input_dict)
 
-
-    st.set_page_config(
-        page_title="Loan Prediction App",
-        page_icon="loan_approved_hero_image.jpg"
-    )
-
-    st.set_option('deprecation.showPyplotGlobalUse', False)
-
     ######################
     #main page layout
     ######################
@@ -160,16 +160,16 @@ def main():
     st.sidebar.write("Please choose parameters that describe the applicant")
 
     #input features
-    IDs = get_ids(FASTAPI_URI)["IDs"]
+    IDs = df_data["SK_ID_CURR"].tolist()
     
     SK_ID_CURR = st.sidebar.selectbox("Select client ID: ", (IDs))
-    dict_data = get_data(FASTAPI_URI, int(SK_ID_CURR))["Data"]
-    st.write(dict_data[0][0])
-    AMT_CREDIT = st.sidebar.number_input("Enter the credit amount of the loan (dollars):", min_value=1.0, value=dict_data[0][0]['AMT_CREDIT'])
-    AMT_INCOME_TOTAL = st.sidebar.number_input("Enter the annual income of the client (dollars):", min_value=1.0, value=dict_data[0][0]['AMT_INCOME_TOTAL'])
+    dict_data = df_data.loc[df_data["SK_ID_CURR"] == SK_ID_CURR].to_dict(orient='records')
+    st.write(dict_data)
+    AMT_CREDIT = st.sidebar.number_input("Enter the credit amount of the loan (dollars):", min_value=1.0, value=dict_data[0]['AMT_CREDIT'])
+    AMT_INCOME_TOTAL = st.sidebar.number_input("Enter the annual income of the client (dollars):", min_value=1.0, value=dict_data[0]['AMT_INCOME_TOTAL'])
     
-    if dict_data[0][0]['AMT_ANNUITY'] != None:
-        AMT_ANNUITY = st.sidebar.number_input("Enter the loan annuity (dollars):", min_value=1.0, value=dict_data[0][0]['AMT_ANNUITY'])
+    if dict_data[0]['AMT_ANNUITY'] != None:
+        AMT_ANNUITY = st.sidebar.number_input("Enter the loan annuity (dollars):", min_value=1.0, value=dict_data[0]['AMT_ANNUITY'])
     else:
         AMT_ANNUITY = st.sidebar.number_input("Enter the loan annuity (dollars):", min_value=1.0, disabled=True)
         AMT_ANNUITY = None
@@ -177,10 +177,10 @@ def main():
     AMT_GOODS_PRICE = st.sidebar.number_input(
         "For consumer loans, enter the price of the goods for which the loan is given:", 
         min_value=1.0, 
-        value=dict_data[0][0]['AMT_GOODS_PRICE']
+        value=dict_data[0]['AMT_GOODS_PRICE']
     )
     
-    if dict_data[0][0]["CODE_GENDER"] == True:
+    if dict_data[0]["CODE_GENDER"] == True:
         CODE_GENDER = st.sidebar.radio("Select client gender: ", ('Female', 'Male'), index=0)
     else:
         CODE_GENDER = st.sidebar.radio("Select client gender: ", ('Female', 'Male'), index=1)
@@ -190,7 +190,7 @@ def main():
     else:
         CODE_GENDER = False
 
-    date_of_birth = datetime.date.today() + datetime.timedelta(days=dict_data[0][0]["DAYS_BIRTH"])
+    date_of_birth = datetime.date.today() + datetime.timedelta(days=dict_data[0]["DAYS_BIRTH"])
     DAYS_BIRTH = -(datetime.date.today() - (st.sidebar.date_input(
         "Enter the birth date of the client:", 
         min_value=datetime.date(1900, 1, 1), 
@@ -218,7 +218,7 @@ def main():
     NAME_FAMILY_STATUS = st.sidebar.selectbox(
         "Select the family status of the client: ", 
         family_status, 
-        index=get_string_index(family_status, dict_data[0][0]["NAME_FAMILY_STATUS"])
+        index=get_string_index(family_status, dict_data[0]["NAME_FAMILY_STATUS"])
     )
     
     education_type = [
@@ -232,7 +232,7 @@ def main():
     NAME_EDUCATION_TYPE = st.sidebar.selectbox(
         "Select the client's education: ", 
         education_type, 
-        index=get_string_index(education_type, dict_data[0][0]["NAME_EDUCATION_TYPE"])
+        index=get_string_index(education_type, dict_data[0]["NAME_EDUCATION_TYPE"])
     )
     
     organization_type = [
@@ -299,15 +299,15 @@ def main():
     ORGANIZATION_TYPE = st.sidebar.selectbox(
         "Select the type of organization where the client works: ", 
         organization_type, 
-        index=get_string_index(organization_type, dict_data[0][0]["ORGANIZATION_TYPE"])
+        index=get_string_index(organization_type, dict_data[0]["ORGANIZATION_TYPE"])
     )
     
-    if dict_data[0][0]["DAYS_EMPLOYED"] != None:
+    if dict_data[0]["DAYS_EMPLOYED"] != None:
         DAYS_EMPLOYED = st.sidebar.number_input(
             "Enter how many days before the application the person started current employment (days):",
             min_value=-20000.0,
             max_value=0.0,
-            value=dict_data[0][0]["DAYS_EMPLOYED"]
+            value=dict_data[0]["DAYS_EMPLOYED"]
         )
     else:
         DAYS_EMPLOYED = st.sidebar.number_input(
@@ -318,12 +318,12 @@ def main():
         )
         DAYS_EMPLOYED = None
         
-    if dict_data[0][0]["ACTIVE_AMT_CREDIT_SUM_DEBT_MAX"] != None:
+    if dict_data[0]["ACTIVE_AMT_CREDIT_SUM_DEBT_MAX"] != None:
         ACTIVE_AMT_CREDIT_SUM_DEBT_MAX = st.sidebar.number_input(
             "Enter the maximum current debt on Credit Bureau credit (dollars):",
             min_value=-5000000.0, 
             max_value=5000000.0,
-            value=dict_data[0][0]["ACTIVE_AMT_CREDIT_SUM_DEBT_MAX"]
+            value=dict_data[0]["ACTIVE_AMT_CREDIT_SUM_DEBT_MAX"]
         )
     else:
         ACTIVE_AMT_CREDIT_SUM_DEBT_MAX = st.sidebar.number_input(
@@ -338,7 +338,7 @@ def main():
         "How many days before the application did client change the identity document with which he applied for the loan, time only relative to the application (days):",
         min_value=-10000,
         max_value=0,
-        value=dict_data[0][0]["DAYS_ID_PUBLISH"]
+        value=dict_data[0]["DAYS_ID_PUBLISH"]
     )
     
     REGION_POPULATION_RELATIVE = st.sidebar.slider(
@@ -346,10 +346,10 @@ def main():
         min_value=0.0, 
         max_value=0.1, 
         step=0.001, 
-        value=dict_data[0][0]["REGION_POPULATION_RELATIVE"]
+        value=dict_data[0]["REGION_POPULATION_RELATIVE"]
     )
     
-    if dict_data[0][0]["FLAG_OWN_CAR"] == True:
+    if dict_data[0]["FLAG_OWN_CAR"] == True:
         FLAG_OWN_CAR = st.sidebar.radio("Does the client own a car?", ("Yes", "No"), index=0)
     else:
         FLAG_OWN_CAR = st.sidebar.radio("Does the client own a car?", ("Yes", "No"), index=1)
@@ -359,11 +359,11 @@ def main():
     else:
         FLAG_OWN_CAR = False
         
-    if dict_data[0][0]["OWN_CAR_AGE"] != None:
+    if dict_data[0]["OWN_CAR_AGE"] != None:
         OWN_CAR_AGE = st.sidebar.number_input(
             "Age of the client's car (years):",
             min_value=0.0,
-            value=dict_data[0][0]["OWN_CAR_AGE"],
+            value=dict_data[0]["OWN_CAR_AGE"],
             disabled=not FLAG_OWN_CAR
         )
     else:
@@ -374,7 +374,7 @@ def main():
         )
         OWN_CAR_AGE = None
     
-    if dict_data[0][0]["FLAG_DOCUMENT_3"] == True:
+    if dict_data[0]["FLAG_DOCUMENT_3"] == True:
         FLAG_DOCUMENT_3 = st.sidebar.radio("Did client provide document 3? ", ('Yes', 'No'), index=0)
     else:
         FLAG_DOCUMENT_3 = st.sidebar.radio("Did client provide document 3? ", ('Yes', 'No'), index=1
@@ -384,12 +384,12 @@ def main():
     else:
         FLAG_DOCUMENT_3 = False
     
-    if dict_data[0][0]["CLOSED_DAYS_CREDIT_MAX"] != None:
+    if dict_data[0]["CLOSED_DAYS_CREDIT_MAX"] != None:
         CLOSED_DAYS_CREDIT_MAX = st.sidebar.number_input(
             "When the status of the Credit Bureau (CB) reported credits si 'closed', how many days (MAX) before current application did client apply for Credit Bureau credit? time only relative to the application (days):",
             min_value=-5000.0,
             max_value=0.0,
-            value=dict_data[0][0]["CLOSED_DAYS_CREDIT_MAX"]
+            value=dict_data[0]["CLOSED_DAYS_CREDIT_MAX"]
         )
     else:
         CLOSED_DAYS_CREDIT_MAX = st.sidebar.number_input(
@@ -400,20 +400,12 @@ def main():
         )
         CLOSED_DAYS_CREDIT_MAX = None
         
-    # if previous application to loan was accepted
-    prev_loan = st.sidebar.radio("Has the client ever contracted a loan before?", ("Yes", "No"))
-    if prev_loan == "Yes":
-        prev_loan = False
-    else:
-        prev_loan = True
-
-    if dict_data[0][0]["INSTAL_AMT_PAYMENT_SUM"] != None:
+    if dict_data[0]["INSTAL_AMT_PAYMENT_SUM"] != None:
         INSTAL_AMT_PAYMENT_SUM = st.sidebar.number_input(
             "Enter the total sum of previous loan installments (dollars):",
             min_value=0.0,
             max_value=5000000.0,
-            disabled=prev_loan,
-            value=dict_data[0][0]["INSTAL_AMT_PAYMENT_SUM"]
+            value=dict_data[0]["INSTAL_AMT_PAYMENT_SUM"]
         )
     else:
         INSTAL_AMT_PAYMENT_SUM = st.sidebar.number_input(
@@ -424,13 +416,12 @@ def main():
         )
         INSTAL_AMT_PAYMENT_SUM = None
         
-    if dict_data[0][0]["APPROVED_CNT_PAYMENT_MEAN"] != None:
+    if dict_data[0]["APPROVED_CNT_PAYMENT_MEAN"] != None:
         APPROVED_CNT_PAYMENT_MEAN = st.sidebar.number_input(
             "Enter the MEAN term of previous ACCEPTED credit applications (years):",
             min_value=0.0,
             max_value=5000000.0,
-            disabled=prev_loan,
-            value=dict_data[0][0]["APPROVED_CNT_PAYMENT_MEAN"]
+            value=dict_data[0]["APPROVED_CNT_PAYMENT_MEAN"]
         )
     else:
         APPROVED_CNT_PAYMENT_MEAN = st.sidebar.number_input(
@@ -441,13 +432,12 @@ def main():
         )
         APPROVED_CNT_PAYMENT_MEAN = None
     
-    if dict_data[0][0]["PREV_CNT_PAYMENT_MEAN"] != None:
+    if dict_data[0]["PREV_CNT_PAYMENT_MEAN"] != None:
         PREV_CNT_PAYMENT_MEAN = st.sidebar.number_input(
             "Enter the MEAN term of ALL (accepted or refused) previous credit applications (years):",
             min_value=0.0,
-            max_value=5000000.0, 
-            disabled=prev_loan, 
-            value=dict_data[0][0]["PREV_CNT_PAYMENT_MEAN"]
+            max_value=5000000.0,
+            value=dict_data[0]["PREV_CNT_PAYMENT_MEAN"]
         )
     else:
         PREV_CNT_PAYMENT_MEAN = st.sidebar.number_input(
@@ -458,14 +448,13 @@ def main():
         )
         PREV_CNT_PAYMENT_MEAN = None
     
-    if dict_data[0][0]["PREV_APP_CREDIT_PERC_MIN"] != None:
+    if dict_data[0]["PREV_APP_CREDIT_PERC_MIN"] != None:
         PREV_APP_CREDIT_PERC_MIN = st.sidebar.slider(
             "Enter minimum of the ratio between how much credit did client asked for on the previous application and how much he actually was offered (%):",
             min_value=0.0, 
             max_value=1000.0, 
             step=1.0, 
-            value=dict_data[0][0]["PREV_APP_CREDIT_PERC_MIN"], 
-            disabled=prev_loan
+            value=dict_data[0]["PREV_APP_CREDIT_PERC_MIN"], 
         )
     else:
         PREV_APP_CREDIT_PERC_MIN = st.sidebar.slider(
@@ -477,13 +466,12 @@ def main():
         )
         PREV_APP_CREDIT_PERC_MIN = None
         
-    if dict_data[0][0]["INSTAL_DPD_MEAN"] != None:
+    if dict_data[0]["INSTAL_DPD_MEAN"] != None:
         INSTAL_DPD_MEAN = st.sidebar.number_input(
             "What is the MEAN days past due of the previous credit? (days):",
             min_value=0.0, 
             max_value=10000.0, 
-            value=dict_data[0][0]["INSTAL_DPD_MEAN"],
-            disabled=prev_loan
+            value=dict_data[0]["INSTAL_DPD_MEAN"],
         )
     else:
         INSTAL_DPD_MEAN = st.sidebar.number_input(
@@ -494,12 +482,11 @@ def main():
         )
         INSTAL_DPD_MEAN = None
     
-    if dict_data[0][0]["INSTAL_DAYS_ENTRY_PAYMENT_MAX"] != None:
+    if dict_data[0]["INSTAL_DAYS_ENTRY_PAYMENT_MAX"] != None:
         INSTAL_DAYS_ENTRY_PAYMENT_MAX = st.sidebar.number_input("What is the maximum number of days between when the installments of previous credit was actually paid and the application date of current loan (days):",
                                                                 min_value=-5000.0, 
                                                                 max_value=0.0, 
-                                                                value=dict_data[0][0]["INSTAL_DAYS_ENTRY_PAYMENT_MAX"], 
-                                                                disabled=prev_loan
+                                                                value=dict_data[0]["INSTAL_DAYS_ENTRY_PAYMENT_MAX"], 
                                                                )
     else:
         INSTAL_DAYS_ENTRY_PAYMENT_MAX = st.sidebar.number_input("What is the maximum number of days between when the installments of previous credit was actually paid and the application date of current loan (days):",
@@ -509,12 +496,11 @@ def main():
                                                                )
         INSTAL_DAYS_ENTRY_PAYMENT_MAX = None
     
-    if dict_data[0][0]["POS_MONTHS_BALANCE_SIZE"] != None:
+    if dict_data[0]["POS_MONTHS_BALANCE_SIZE"] != None:
         POS_MONTHS_BALANCE_SIZE = st.sidebar.number_input(
             "How may monthly cash balances were observed for ALL the previous loans (months):", 
             min_value=0.0,
-            value=dict_data[0][0]["POS_MONTHS_BALANCE_SIZE"],
-            disabled=prev_loan
+            value=dict_data[0]["POS_MONTHS_BALANCE_SIZE"],
         )
     else:
         POS_MONTHS_BALANCE_SIZE = st.sidebar.number_input(
