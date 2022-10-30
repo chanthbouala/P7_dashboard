@@ -4,3 +4,5 @@ streamlit
 numpy
 requests
 pickle5==0.0.11
+lightgbm==3.3.3
+matplotlib
