@@ -530,7 +530,7 @@ def main():
         #prepare test set for shap explainability
         st.subheader('Result Interpretability - Applicant Level')
         shap.initjs()
-        with open('/shap_explainer.pickle', 'rb') as handle:
+        with open('shap_explainer.pickle', 'rb') as handle:
             explainer = pickle.load(handle)
         df_user_input = pd.DataFrame([user_input])
 
@@ -548,7 +548,7 @@ def main():
         st.pyplot(fig)
         
         st.subheader('Model Interpretability - Overall')
-        with open('/shap_values.pickle', 'rb') as handle:
+        with open('shap_values.pickle', 'rb') as handle:
             shap_values_ttl = pickle.load(handle)
             
         if pred > threshold:
