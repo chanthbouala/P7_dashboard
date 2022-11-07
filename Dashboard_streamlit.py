@@ -534,7 +534,7 @@ def main():
     #main page layout
     ######################
 
-    st.title("Loan Default Prediction")
+    st.title("Loan Default Prediction - P7 OC - André CHANTHBOUALA")
     st.subheader("Are you sure your loan applicant is going to pay the loan back?💸 "
                      "This machine learning app will help you to make a prediction to help you with your decision!")
 
