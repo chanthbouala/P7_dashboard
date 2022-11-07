@@ -8,11 +8,22 @@ import requests
 import datetime
 import json as js
 import math
+from functions import plot_boxplot_var_by_target
+from sklearn.preprocessing import StandardScaler
 
 FASTAPI_URI = 'https://p7-fastapi-backend.herokuapp.com/'
 #FASTAPI_URI = 'http://127.0.0.1:8000/'
+threshold = 0.51
 
 df_data = pd.read_csv('df_application_test.zip', compression='zip', header=0, sep=',', quotechar='"')
+#df_data_knn = pd.read_csv('df_application_test_knn_ohe.zip', compression='zip', header=0, sep=',', quotechar='"')
+
+df_data_knn_ohe = pd.read_csv('df_application_test_knn_ohe.zip', compression='zip', header=0, sep=',', quotechar='"')  
+ss = StandardScaler()
+data_knn_ohe_scaled = ss.fit_transform(df_data_knn_ohe.drop("SK_ID_CURR", axis=1))
+df_data_knn_ohe_scaled = pd.DataFrame(data_knn_ohe_scaled, columns=df_data_knn_ohe.drop("SK_ID_CURR", axis=1).columns)
+df_data_knn_ohe_scaled = pd.concat([df_data_knn_ohe["SK_ID_CURR"], df_data_knn_ohe_scaled], axis=1)
+
 df_selection = pd.read_csv('selected_feats.csv')
 selection = df_selection["selected_feats"].tolist()
 
@@ -39,6 +50,19 @@ def main():
         json_str = js.dumps(data)
         payload = js.loads(json_str, object_pairs_hook=replace_none_in_dict)
         response = requests.post(model_uri + 'predict', json=payload, headers=headers)
+
+        if response.status_code != 200:
+            raise Exception(
+                "Request failed with status {}, {}".format(response.status_code, response.text))
+
+        return response.json()
+    
+    def request_knns(model_uri, ID):
+        headers = {"Content-Type": "application/json"}
+        #response = requests.request(method='POST', headers=headers, url=model_uri, json=payload)
+        json_str = js.dumps(ID)
+        payload = js.loads(json_str, object_pairs_hook=replace_none_in_dict)
+        response = requests.post(model_uri + 'find_knn', json=payload, headers=headers)
 
         if response.status_code != 200:
             raise Exception(
@@ -524,113 +548,136 @@ def main():
     the probability that the applicant reimburse or not the loan on time are quite time-consuming. It gets even more complicated as the number of applications that are reviewed by loan officers increases.
     Human approval requires extensive hours to review each application. This sometimes causes human error and bias for it is not easy 
     to digest the heavy workload.""")
-    st.write("Please find below the data about the client:")
-    feat_filter = st.checkbox("Tick the box to filter out the unimportant data:")
-    if feat_filter:
-        st.write(df_data.loc[df_data["SK_ID_CURR"] == SK_ID_CURR][selection])
-    else:
-        st.write(df_data.loc[df_data["SK_ID_CURR"] == SK_ID_CURR].drop("Unnamed: 0", axis=1))
+    if st.checkbox("Tick the box if you want to explore the data:"):
+        disp_cols = st.multiselect("Choose the features to display and select client's ID on the left side panel:",
+                                       sorted(df_data.drop("Unnamed: 0", axis=1).columns),#.sort(),
+                                       default=sorted(selection))   
+        btn_display_data = st.button("Display selected data")
+
+        if btn_display_data:
+            st.write(df_data.loc[df_data["SK_ID_CURR"] == SK_ID_CURR][disp_cols])
+
+        btn_display_knns = st.button("Compare most important data about the selected applicant with 10 similar applicants and all applicants")
+
+        if btn_display_knns:
+            with st.spinner('Wait for the calculation to be done...'):
+                results = request_knns(FASTAPI_URI, {"SK_ID_CURR": SK_ID_CURR})
+                y_test = pd.Series(np.where(np.asarray(results["y_pred_all"]) > threshold, 1, 0))
+                y_all = y_test.replace({0: 'repaid (global)',
+                                       1: 'not repaid (global)'})
+                X_neigh = df_data_knn_ohe_scaled.iloc[results["knns"]]
+                y_neigh = y_test.iloc[results["knns"]].replace({0: 'repaid (neighbors)',
+                                                                1: 'not repaid (neighbors)'})
+                X_cust = df_data_knn_ohe_scaled.loc[df_data_knn_ohe_scaled["SK_ID_CURR"] == SK_ID_CURR].squeeze(axis=0)
+                main_cols = ['PAYMENT_RATE', 'AMT_GOODS_PRICE', 'DAYS_EMPLOYED',
+                             'INSTAL_DPD_MEAN', 'POS_MONTHS_BALANCE_SIZE', 'ANNUITY_INCOME_PERC', 'AMT_ANNUITY', 'AMT_CREDIT',
+                             'CODE_GENDER', 'DAYS_BIRTH']
+                fig = plot_boxplot_var_by_target(df_data_knn_ohe_scaled, y_all, X_neigh, y_neigh, X_cust, main_cols)
+                st.pyplot(fig)
+            
     st.subheader("In order to calculate failure probability, you need to execute the following steps:")
     st.markdown("""
-    1. Select the client ID on the left side bar.
-    2. Press the "Predict" button (all the way down of the left side bar) and wait for the result.
+    1. Select the client ID on the left side panel.
+    2. Press the "Predict" button (all the way down of the left side panel) and wait for the result.
     """)
 
     st.subheader("Below is your prediction result:")
+    
     
     #predict button
     btn_predict = st.sidebar.button("Predict")
 
     if btn_predict:
-        user_input = preprocess(
-            AMT_CREDIT, 
-            AMT_INCOME_TOTAL,
-            AMT_ANNUITY,
-            AMT_GOODS_PRICE,
-            CODE_GENDER,
-            DAYS_BIRTH, 
-            NAME_FAMILY_STATUS,
-            NAME_EDUCATION_TYPE,
-            ORGANIZATION_TYPE,
-            DAYS_EMPLOYED,
-            ACTIVE_AMT_CREDIT_SUM_DEBT_MAX,
-            DAYS_ID_PUBLISH, 
-            REGION_POPULATION_RELATIVE,
-            FLAG_OWN_CAR,
-            OWN_CAR_AGE, 
-            FLAG_DOCUMENT_3, 
-            CLOSED_DAYS_CREDIT_MAX,
-            INSTAL_AMT_PAYMENT_SUM,
-            APPROVED_CNT_PAYMENT_MEAN,
-            PREV_CNT_PAYMENT_MEAN,
-            PREV_APP_CREDIT_PERC_MIN,
-            INSTAL_DPD_MEAN,
-            INSTAL_DAYS_ENTRY_PAYMENT_MAX,
-            POS_MONTHS_BALANCE_SIZE
-        )
+        with st.spinner('Wait for the calculation to be done...'):
+            user_input = preprocess(
+                AMT_CREDIT, 
+                AMT_INCOME_TOTAL,
+                AMT_ANNUITY,
+                AMT_GOODS_PRICE,
+                CODE_GENDER,
+                DAYS_BIRTH, 
+                NAME_FAMILY_STATUS,
+                NAME_EDUCATION_TYPE,
+                ORGANIZATION_TYPE,
+                DAYS_EMPLOYED,
+                ACTIVE_AMT_CREDIT_SUM_DEBT_MAX,
+                DAYS_ID_PUBLISH, 
+                REGION_POPULATION_RELATIVE,
+                FLAG_OWN_CAR,
+                OWN_CAR_AGE, 
+                FLAG_DOCUMENT_3, 
+                CLOSED_DAYS_CREDIT_MAX,
+                INSTAL_AMT_PAYMENT_SUM,
+                APPROVED_CNT_PAYMENT_MEAN,
+                PREV_CNT_PAYMENT_MEAN,
+                PREV_APP_CREDIT_PERC_MIN,
+                INSTAL_DPD_MEAN,
+                INSTAL_DAYS_ENTRY_PAYMENT_MAX,
+                POS_MONTHS_BALANCE_SIZE
+            )
 
-        pred = None
-        risk_score = None
-        pred = request_prediction(FASTAPI_URI, user_input)["Probability"][0]
-        
-        threshold = 0.51
-        if pred > threshold:
-            st.error('DECLINED! The applicant has a high risk of not paying the loan back.')
-            if pred > threshold and pred < 0.6:
-                risk_score = "A"
-            elif pred >= 0.6 and pred < 0.7:
-                risk_score = "B"
-            elif pred >= 0.7 and pred < 0.8:
-                risk_score = "C"
-            elif pred >= 0.8 and pred < 0.9:
-                risk_score = "D"
-            elif pred >= 0.9 and pred <= 1:
-                risk_score = "E"
-            st.metric('The credit default risk is:', risk_score)
-            st.write("A: The applicant is close to getting the loan")
-            st.write("B: The applicant can get the loan with minor adjustements in his application")
-            st.write("C: The applicant can get the loan with major adjustements in his application")
-            st.write("D: The applicant is far from getting the loan")
-            st.write("E: The applicant will almost never get the loan")
+            pred = None
+            risk_score = None
+            pred = request_prediction(FASTAPI_URI, user_input)["Probability"][0]
 
-        else:
-            st.success('APPROVED! The applicant has a high probability of paying the loan back.')
-        
-        #prepare test set for shap explainability
-        st.subheader('Result Interpretability - Applicant Level')
-        shap.initjs()
-            
-        df_user_input = pd.DataFrame([user_input])
+            if pred > threshold:
+                st.error('DECLINED! The applicant has a high risk of not paying the loan back.')
+                if pred > threshold and pred < 0.6:
+                    risk_score = "A"
+                elif pred >= 0.6 and pred < 0.7:
+                    risk_score = "B"
+                elif pred >= 0.7 and pred < 0.8:
+                    risk_score = "C"
+                elif pred >= 0.8 and pred < 0.9:
+                    risk_score = "D"
+                elif pred >= 0.9 and pred <= 1:
+                    risk_score = "E"
+                st.metric('The credit default risk is:', risk_score)
+                st.write("A: The applicant is close to getting the loan")
+                st.write("B: The applicant can get the loan with minor adjustements in his application")
+                st.write("C: The applicant can get the loan with major adjustements in his application")
+                st.write("D: The applicant is far from getting the loan")
+                st.write("E: The applicant will almost never get the loan")
 
-        df_user_input["NAME_EDUCATION_TYPE"] = df_user_input["NAME_EDUCATION_TYPE"].astype('category')
-        df_user_input["ORGANIZATION_TYPE"] = df_user_input["ORGANIZATION_TYPE"].astype('category')
-        df_user_input["NAME_FAMILY_STATUS"] = df_user_input["NAME_FAMILY_STATUS"].astype('category')
-        df_user_input["OWN_CAR_AGE"] = df_user_input["OWN_CAR_AGE"].astype('float')
-       
-        #shap_values = explainer.shap_values(df_user_input)
-        #fig = shap.force_plot(explainer.expected_value[1], shap_values[1], feature_names=df_user_input.columns, matplotlib=True, text_rotation=90)
-        #fig = shap.plots.waterfall(exp[df_data.reset_index().loc[df_data.reset_index()["SK_ID_CURR"] == SK_ID_CURR].index[0]])
-        fig = shap.plots._waterfall.waterfall_legacy(explainer.expected_value[1],
-                                                     shap_values_ttl[1][df_data.reset_index().loc[
-                                                         df_data.reset_index()["SK_ID_CURR"] == SK_ID_CURR].index[0]],
-                                                     feature_names=selection, 
-                                                     max_display=40)
-        st.write("""
-        In this chart blue and red mean the contribution of each variable to the outcome of the simulation, i.e. blue increases the chance of getting the loan whereas red decreases the chance of getting the loan.
-        """)                                             
-        st.pyplot(fig)
+            else:
+                st.success('APPROVED! The applicant has a high probability of paying the loan back.')
+
+            #prepare test set for shap explainability
+            st.subheader('Result Interpretability - Applicant Level')
+            shap.initjs()
+
+            df_user_input = pd.DataFrame([user_input])
+
+            df_user_input["NAME_EDUCATION_TYPE"] = df_user_input["NAME_EDUCATION_TYPE"].astype('category')
+            df_user_input["ORGANIZATION_TYPE"] = df_user_input["ORGANIZATION_TYPE"].astype('category')
+            df_user_input["NAME_FAMILY_STATUS"] = df_user_input["NAME_FAMILY_STATUS"].astype('category')
+            df_user_input["OWN_CAR_AGE"] = df_user_input["OWN_CAR_AGE"].astype('float')
+
+            #shap_values = explainer.shap_values(df_user_input)
+            #fig = shap.force_plot(explainer.expected_value[1], shap_values[1], feature_names=df_user_input.columns, matplotlib=True, text_rotation=90)
+            #fig = shap.plots.waterfall(exp[df_data.reset_index().loc[df_data.reset_index()["SK_ID_CURR"] == SK_ID_CURR].index[0]])
+            fig = shap.plots._waterfall.waterfall_legacy(explainer.expected_value[1],
+                                                         shap_values_ttl[1][df_data.reset_index().loc[
+                                                             df_data.reset_index()["SK_ID_CURR"] == SK_ID_CURR].index[0]],
+                                                         feature_names=selection, 
+                                                         max_display=40)
+            st.write("""
+            In this chart blue and red mean the contribution of each variable to the outcome of the simulation, i.e. blue increases the chance of getting the loan whereas red decreases the chance of getting the loan.
+            """)                                             
+            st.pyplot(fig)
         
-        st.subheader('Model Interpretability - Overall')
-        st.write(""" 
-        In this chart blue and red mean the feature value, i.e. annual income blue is a smaller value e.g. 40K USD, and red is a higher value e.g. 100K USD. The x-axis represent the contribution of the variable to the outcome of the simulation, i.e. the negative contributions (left part of the graph) increase the chance of getting the loan while the positive contributions (right part of the graph) decrease the chance of getting the loan. The width of the bars represents the number of observations on a certain feature value, for example with the INSTAL_DPD_MEAN feature we can see that most of the applicants are within the lower or blue area. The features are ordered according to their importance to the outcome of the simulation, i.e. PAYMENT_RATE is the most important feature globally and PREV_CNT_PAYMENT_MEAN is the least important globally. What we learn from this chart is that features such as CODE_GENDER or DAYS_EMPLOYED are the most likely to strongly drive the outcome prediction.
-        """)
+            st.subheader('Model Interpretability - Overall')
+            st.write(""" 
+            In this chart blue and red mean the feature value, i.e. annual income blue is a smaller value e.g. 40K USD, and red is a higher value e.g. 100K USD. The x-axis represent the contribution of the variable to the outcome of the simulation, i.e. the negative contributions (left part of the graph) increase the chance of getting the loan while the positive contributions (right part of the graph) decrease the chance of getting the loan. The width of the bars represents the number of observations on a certain feature value, for example with the INSTAL_DPD_MEAN feature we can see that most of the applicants are within the lower or blue area. The features are ordered according to their importance to the outcome of the simulation, i.e. PAYMENT_RATE is the most important feature globally and PREV_CNT_PAYMENT_MEAN is the least important globally. What we learn from this chart is that features such as CODE_GENDER or DAYS_EMPLOYED are the most likely to strongly drive the outcome prediction.
+            """)
         
-        fig_ttl = shap.summary_plot(
-            shap_values_ttl[1],
-            features=df_data[selection], 
-            feature_names=df_data[selection].columns
-        )
-        st.pyplot(fig_ttl)
+        with st.spinner('Wait for the display of the graph...'):
+            fig_ttl = shap.summary_plot(
+                shap_values_ttl[1],
+                features=df_data[selection], 
+                feature_names=df_data[selection].columns
+            )
+            st.pyplot(fig_ttl)
 
     
 if __name__ == '__main__':
