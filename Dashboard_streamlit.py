@@ -9,16 +9,16 @@ import datetime
 import json as js
 import math
 
-#FASTAPI_URI = 'https://p7-fastapi-backend.herokuapp.com/'
-FASTAPI_URI = 'http://127.0.0.1:8000/'
+FASTAPI_URI = 'https://p7-fastapi-backend.herokuapp.com/'
+#FASTAPI_URI = 'http://127.0.0.1:8000/'
 
 df_data = pd.read_csv('df_application_test.zip', compression='zip', header=0, sep=',', quotechar='"')
 df_selection = pd.read_csv('selected_feats.csv')
 selection = df_selection["selected_feats"].tolist()
 
-with open('shap_explainer_2.pickle', 'rb') as handle:
+with open('shap_explainer.pickle', 'rb') as handle:
     explainer = pickle.load(handle)
-with open('shap_values_2.pickle', 'rb') as handle:
+with open('shap_values.pickle', 'rb') as handle:
     shap_values_ttl = pickle.load(handle)
 
 st.set_page_config(
