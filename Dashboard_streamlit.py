@@ -550,7 +550,7 @@ def main():
     to digest the heavy workload.""")
     if st.checkbox("Tick the box if you want to explore the data:"):
         disp_cols = st.multiselect("Choose the features to display and select client's ID on the left side panel:",
-                                       sorted(df_data.drop("Unnamed: 0", axis=1).columns),#.sort(),
+                                       sorted(df_data.columns),#.sort(),
                                        default=sorted(selection))   
         btn_display_data = st.button("Display selected data")
 
