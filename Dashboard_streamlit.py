@@ -166,19 +166,19 @@ def main():
     )
     
     if dict_data[0]["CODE_GENDER"] == True:
-        CODE_GENDER = st.sidebar.radio("Select client gender: ", ('Female', 'Male'), index=0)
-    else:
         CODE_GENDER = st.sidebar.radio("Select client gender: ", ('Female', 'Male'), index=1)
+    else:
+        CODE_GENDER = st.sidebar.radio("Select client gender: ", ('Female', 'Male'), index=0)
     
     if CODE_GENDER == "Female":
-        CODE_GENDER = True
-    else:
         CODE_GENDER = False
+    else:
+        CODE_GENDER = True
 
     date_of_birth = datetime.date.today() + datetime.timedelta(days=dict_data[0]["DAYS_BIRTH"])
     DAYS_BIRTH = -(datetime.date.today() - (st.sidebar.date_input(
         "(DAYS_BIRTH) Enter the birth date of the client:", 
-        min_value=datetime.date(1900, 1, 1), 
+        min_value=datetime.date(1900, 1, 1),
         max_value=datetime.date.today(), 
         value=date_of_birth))
                   ).days
