@@ -11,33 +11,58 @@ import math
 from functions import plot_boxplot_var_by_target
 from sklearn.preprocessing import StandardScaler
 
-FASTAPI_URI = 'https://p7-fastapi-backend.herokuapp.com/'
-#FASTAPI_URI = 'http://127.0.0.1:8000/'
-threshold = 0.51
-
-df_data = pd.read_csv('df_application_test.zip', compression='zip', header=0, sep=',', quotechar='"')
-#df_data_knn = pd.read_csv('df_application_test_knn_ohe.zip', compression='zip', header=0, sep=',', quotechar='"')
-
-df_data_knn_ohe = pd.read_csv('df_application_test_knn_ohe.zip', compression='zip', header=0, sep=',', quotechar='"')  
-ss = StandardScaler()
-data_knn_ohe_scaled = ss.fit_transform(df_data_knn_ohe.drop("SK_ID_CURR", axis=1))
-df_data_knn_ohe_scaled = pd.DataFrame(data_knn_ohe_scaled, columns=df_data_knn_ohe.drop("SK_ID_CURR", axis=1).columns)
-df_data_knn_ohe_scaled = pd.concat([df_data_knn_ohe["SK_ID_CURR"], df_data_knn_ohe_scaled], axis=1)
-
-df_selection = pd.read_csv('selected_feats.csv')
-selection = df_selection["selected_feats"].tolist()
-
-with open('shap_explainer.pickle', 'rb') as handle:
-    explainer = pickle.load(handle)
-with open('shap_values.pickle', 'rb') as handle:
-    shap_values_ttl = pickle.load(handle)
-
 st.set_page_config(
     page_title="Loan Prediction App",
     page_icon="loan_approved_hero_image.jpg"
 )
 
 st.set_option('deprecation.showPyplotGlobalUse', False)
+
+FASTAPI_URI = 'https://p7-fastapi-backend.herokuapp.com/'
+#FASTAPI_URI = 'http://127.0.0.1:8000/'
+threshold = 0.51
+
+@st.cache
+def load_data():
+    return pd.read_csv('df_application_test.zip', compression='zip', header=0, sep=',', quotechar='"')
+
+@st.cache
+def load_data_knn():
+    return pd.read_csv('df_application_test_knn_ohe.zip', compression='zip', header=0, sep=',', quotechar='"')
+
+df_data = load_data()
+df_data_knn_ohe = load_data_knn()
+
+@st.cache
+def scale_data(df_data_knn_ohe): 
+    ss = StandardScaler()
+    data_knn_ohe_scaled = ss.fit_transform(df_data_knn_ohe.drop("SK_ID_CURR", axis=1))
+    df_data_knn_ohe_scaled = pd.DataFrame(data_knn_ohe_scaled, columns=df_data_knn_ohe.drop("SK_ID_CURR", axis=1).columns)
+    df_data_knn_ohe_scaled = pd.concat([df_data_knn_ohe["SK_ID_CURR"], df_data_knn_ohe_scaled], axis=1)
+    return df_data_knn_ohe_scaled
+
+df_data_knn_ohe_scaled = scale_data(df_data_knn_ohe)
+
+@st.cache
+def load_selected_feat():
+    df_selection = pd.read_csv('selected_feats.csv')
+    return df_selection["selected_feats"].tolist()
+
+selection = load_selected_feat()
+
+@st.cache
+def load_shap_explainer():
+    with open('shap_explainer.pickle', 'rb') as handle:
+        return pickle.load(handle)
+
+explainer = load_shap_explainer()
+
+@st.cache
+def load_shap_values():
+    with open('shap_values.pickle', 'rb') as handle:
+        return pickle.load(handle)
+    
+shap_values_ttl = load_shap_values()
 
 def main():
     def replace_none_in_dict(items):
@@ -571,7 +596,7 @@ def main():
                 X_cust = df_data_knn_ohe_scaled.loc[df_data_knn_ohe_scaled["SK_ID_CURR"] == SK_ID_CURR].squeeze(axis=0)
                 main_cols = ['PAYMENT_RATE', 'AMT_GOODS_PRICE', 'DAYS_EMPLOYED',
                              'INSTAL_DPD_MEAN', 'POS_MONTHS_BALANCE_SIZE', 'ANNUITY_INCOME_PERC', 'AMT_ANNUITY', 'AMT_CREDIT',
-                             'CODE_GENDER', 'DAYS_BIRTH']
+                             'INSTAL_AMT_PAYMENT_SUM', 'DAYS_BIRTH']
                 fig = plot_boxplot_var_by_target(df_data_knn_ohe_scaled, y_all, X_neigh, y_neigh, X_cust, main_cols)
                 st.pyplot(fig)
             
