@@ -13,7 +13,8 @@ from sklearn.preprocessing import StandardScaler
 
 st.set_page_config(
     page_title="Loan Prediction App",
-    page_icon="loan_approved_hero_image.jpg"
+    page_icon="loan_approved_hero_image.jpg",
+    layout="wide"
 )
 
 st.set_option('deprecation.showPyplotGlobalUse', False)
