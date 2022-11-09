@@ -122,8 +122,15 @@ def main():
                   ):
 
         # Pre-processing user input
-        PAYMENT_RATE = AMT_ANNUITY / AMT_CREDIT
-        ANNUITY_INCOME_PERC = AMT_ANNUITY/AMT_INCOME_TOTAL
+        if AMT_CREDIT != 0:
+            PAYMENT_RATE = AMT_ANNUITY / AMT_CREDIT
+        else:
+            PAYMENT_RATE = np.nan
+        if AMT_INCOME_TOTAL != 0:
+            ANNUITY_INCOME_PERC = AMT_ANNUITY / AMT_INCOME_TOTAL
+        else:
+            ANNUITY_INCOME_PERC = np.nan
+            
         user_input_dict = {
             "ACTIVE_AMT_CREDIT_SUM_DEBT_MAX": ACTIVE_AMT_CREDIT_SUM_DEBT_MAX,
             "AMT_ANNUITY": AMT_ANNUITY,
@@ -694,7 +701,7 @@ def main():
         
             st.subheader('Model Interpretability - Overall')
             st.write(""" 
-            In this chart blue and red mean the feature value, i.e. annual income blue is a smaller value e.g. 40K USD, and red is a higher value e.g. 100K USD. The x-axis represent the contribution of the variable to the outcome of the simulation, i.e. the negative contributions (left part of the graph) increase the chance of getting the loan while the positive contributions (right part of the graph) decrease the chance of getting the loan. The width of the bars represents the number of observations on a certain feature value, for example with the INSTAL_DPD_MEAN feature we can see that most of the applicants are within the lower or blue area. The features are ordered according to their importance to the outcome of the simulation, i.e. PAYMENT_RATE is the most important feature globally and PREV_CNT_PAYMENT_MEAN is the least important globally. What we learn from this chart is that features such as CODE_GENDER or DAYS_EMPLOYED are the most likely to strongly drive the outcome prediction.
+            In this chart blue and red mean the feature value, i.e. annual income blue is a smaller value e.g. 40K USD, and red is a higher value e.g. 100K USD. The x-axis represent the contribution of the variable to the outcome of the simulation, i.e. the negative contributions (left part of the graph) increase the chance of getting the loan while the positive contributions (right part of the graph) decrease the chance of getting the loan. The width of the bars represents the number of observations on a certain feature value, for example with the INSTAL_DPD_MEAN feature we can see that most of the applicants are within the lower or blue area. The features are ordered according to their importance to the outcome of the simulation, i.e. PAYMENT_RATE is the most important feature globally and PREV_CNT_PAYMENT_MEAN is the least important globally. What we learn from this chart is that features such as CODE_GENDER or DAYS_EMPLOYED are the most likely to strongly drive the prediction outcome.
             """)
         
         with st.spinner('Wait for the display of the graph...'):
