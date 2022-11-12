@@ -580,7 +580,7 @@ def main():
 
     st.title("Loan Default Prediction - P7 OC - André CHANTHBOUALA")
     st.subheader("Are you sure your loan applicant is going to pay the loan back?💸 "
-                     "This machine learning app will help you to make a prediction to help you with your decision!")
+                     "This machine learning app will make a prediction to help you with your decision!")
 
     col1, col2 = st.columns([1, 1])
 
