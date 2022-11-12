@@ -24,6 +24,17 @@ FASTAPI_URI = 'https://p7-fastapi-backend.herokuapp.com/'
 threshold = 0.51
 
 @st.cache
+def wake_API(model_uri):
+    response = requests.get(model_uri)
+
+    if response.status_code != 200:
+        raise Exception(
+            "Request failed with status {}, {}".format(response.status_code, response.text))
+    return response
+
+woke_up = wake_API(FASTAPI_URI)
+
+@st.cache
 def load_data():
     return pd.read_csv('df_application_test.zip', compression='zip', header=0, sep=',', quotechar='"')
 
